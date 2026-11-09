@@ -15,15 +15,30 @@ export async function loadSoundfont(url) {
   const data = new Uint8Array(buffer);
   // parse the sf2 file:
   // return new SoundFont2(data);
-  return new SoundFont2(data);
+  const sf2 = new SoundFont2(data);
+  patchVelRange(sf2)
+  return sf2;
+}
+
+// until https://github.com/Mrtenz/soundfont2/pull/8 is merged
+function patchVelRange(sf2: SoundFont2) {
+  sf2.presets.forEach((preset) => {
+    preset.zones
+      .forEach((zone) => {
+        zone.velRange = zone.generators[44]?.range
+        zone.instrument.zones.forEach((zone) => {
+          zone.velRange = zone.generators[44]?.range
+        })
+      })
+  })
 }
 
 export function applyOptions(ctx, source, options) {
   let { time = ctx.currentTime } = options;
   const {
-    midi,
+    note,
+    velocity,
     start,
-    velocity = 0.3,
     startLoop,
     endLoop,
     sampleRate,
@@ -51,7 +66,7 @@ export function applyOptions(ctx, source, options) {
 
   // const baseDetune = 100 * rootKey + pitchCorrection - fineTune;
   const baseDetune = 100 * rootKey + pitchCorrection - fineTune;
-  const cents = midi * 100 - baseDetune;
+  const cents = note * 100 - baseDetune;
   /*   console.log('baseDetune', baseDetune);
   console.log('originalPitch', originalPitch);
   console.log('pitchCorrection', pitchCorrection);
@@ -82,11 +97,12 @@ export function applyOptions(ctx, source, options) {
       Object.fromEntries(unimplemented.map((key) => [key, rest[key]]))
     ); */
   }
+  const velocityGain = (velocity / 127) ** 2;
   const vol = ctx.createGain();
   const volEnv = [
     time,
     0,
-    velocity,
+    velocityGain,
     tc2s(delayVolEnv),
     tc2s(attackVolEnv),
     tc2s(holdVolEnv),
@@ -145,8 +161,11 @@ export function readableGenerators(unreadable) {
     }),
   );
 }
-export const isActiveZone = (zone: PresetZone | InstrumentZone, midi: number) =>
-  !zone.keyRange || (zone.keyRange.lo <= midi && midi <= zone.keyRange.hi);
+export const isActiveZone = (zone: PresetZone | InstrumentZone, note: number, velocity: number) => {
+  const inKeyRange = !zone.keyRange || (zone.keyRange.lo <= note && note <= zone.keyRange.hi);
+  const inVelRange = !zone.velRange || (zone.velRange.lo <= velocity && velocity <= zone.velRange.hi);
+  return inKeyRange && inVelRange;
+}
 
 export const mergeGenerators = (preset: Preset, instrument: Instrument, izone: InstrumentZone, pzone: PresetZone) => {
   Object.fromEntries(
@@ -157,13 +176,12 @@ export const mergeGenerators = (preset: Preset, instrument: Instrument, izone: I
   );
 };
 
-export const getActiveZones = (preset: Preset, midi) => {
-  // console.log('preset', preset);
+export const getActiveZones = (preset: Preset, note: number, velocity: number) => {
   const activeZones = preset.zones
-    .filter((pzone) => isActiveZone(pzone, midi) && pzone.instrument)
+    .filter((pzone) => isActiveZone(pzone, note, velocity) && pzone.instrument)
     .map((pzone) => {
       return pzone.instrument.zones
-        .filter((izone) => isActiveZone(izone, midi))
+        .filter((izone) => isActiveZone(izone, note, velocity))
         .map((izone) => {
           const mergedGenerators = getGeneratorValues(izone, pzone, preset);
           // console.log('generators', mergedGenerators);
@@ -178,13 +196,14 @@ export const getActiveZones = (preset: Preset, midi) => {
   return activeZones;
 };
 
-export const startPresetNote = (ctx, preset, midi, time = ctx.currentTime) => {
-  const zones = getActiveZones(preset, midi);
+export const startPresetNote = (ctx, preset, note, velocity, time = ctx.currentTime) => {
+  const zones = getActiveZones(preset, note, velocity);
   // console.log('start zones', time, ctx.currentTime);
   const releases = zones.map((zone) =>
     getBufferSourceFromSample(ctx, zone.sample, {
       ...zone.mergedGenerators,
-      midi,
+      note,
+      velocity,
       time,
     }),
   );

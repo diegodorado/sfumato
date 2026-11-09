@@ -23,10 +23,11 @@ import { loadSoundfont, startPresetNote } from 'sfumato';
 ## API
 
 - `loadSoundfount(url)` loads a soundfont from a url. returns [Soundfont2](https://mrtenz.github.io/soundfont2/api/soundfont2/)
-- `startPresetNote(ctx, preset, midi, time)` plays a note, returns `stopHandle`
+- `startPresetNote(ctx, preset, note, velocity, time)` plays a note, returns `stopHandle`
   - `ctx` the audio context to use
   - `preset` the preset to use (use one of [Soundfont2.presets](https://mrtenz.github.io/soundfont2/api/soundfont2/#soundfont2presets))
-  - `midi` midi number to play
+  - `note` midi note number to play
+  - `velocity` midi velocity to play
   - `time` audio context time to start playing (defaults to currentTime)
 - `stopHandle(time)` stops the note at the given time
 
