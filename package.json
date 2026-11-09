@@ -11,6 +11,7 @@
     "prepublishOnly": "npm test --mode run && npm run build",
     "demo": "cd demo && npm run dev"
   },
+  "prepare": "pnpm run build",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/felixroos/sfumato.git"
